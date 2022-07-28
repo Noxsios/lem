@@ -1,0 +1,29 @@
+[tool.poetry]
+name = "lem"
+version = "0.1.0"
+description = ""
+authors = ["razzle <harry@razzle.cloud>"]
+
+packages = [
+    { include = "lem" }
+]
+
+[tool.poetry.scripts]
+lem = 'lem.cli:cli'
+
+[tool.poetry.dependencies]
+python = "^3.9"
+boto3 = "^1.24.40"
+emoji = "^2.0.0"
+blessed = "^1.19.1"
+halo = "^0.0.31"
+click = "^8.1.3"
+awscrt = "^0.13.14"
+
+[tool.poetry.dev-dependencies]
+isort = "^5.10.1"
+black = {version = "^22.6.0", allow-prereleases = true}
+
+[build-system]
+requires = ["poetry-core>=1.0.0"]
+build-backend = "poetry.core.masonry.api"
