@@ -1,5 +1,7 @@
 import click
 
+from .configure import configure
+
 from .check import check
 
 from .console import Console
@@ -16,6 +18,7 @@ def cli():
 
 
 cli.add_command(check)
+cli.add_command(configure)
 
 if __name__ == "__main__":
     cli()
