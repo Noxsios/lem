@@ -25,8 +25,17 @@ lem --help
 ### Command examples
 
 ```bash
+# configure
+lem configure
+
+# select big bang packages to clone
+lem repo clone
+
 # check vpc is good
 lem check vpc
+
+# check/get AWS username
+lem check username
 
 # check all needed dev cli tools are installed
 lem check tools
