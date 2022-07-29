@@ -1,5 +1,15 @@
 # lem
 
+`lem` is a Python CLI for making the Big Bang developer experience a little easier.
+
+Features:
+
+- Clone Big Bang repo's interactively --> `lem repo clone`
+- Check access to Big Bang's AWS GovCloud acc (vpc+username)
+- Check if you have all the developer tools you will need (`kubectl`, `helm`, `yq`, etc...), plus I also included my own list w/ the `--extra` flag.
+- WIP: standup a K3D instance on AWS EC2
+- WIP: deploy Big Bang to K3D w/ options
+
 ## Installing
 
 Python 3.9+ is a prereq.
