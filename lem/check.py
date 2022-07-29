@@ -77,6 +77,7 @@ def tools(extra):
         "k3d",
         "python3",
         "docker",
+        "git",
     ]
 
     if platform.system() == "Darwin":
