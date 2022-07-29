@@ -1,6 +1,7 @@
-import click
 import platform
+
 import boto3
+import click
 
 from .configure import get_config
 from .console import Console

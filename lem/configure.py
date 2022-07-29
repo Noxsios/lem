@@ -1,9 +1,11 @@
 import os
-import click
 from pathlib import Path
-from .console import Console
+
+import click
 import inquirer
 from ruamel.yaml import YAML
+
+from .console import Console
 
 c = Console()
 

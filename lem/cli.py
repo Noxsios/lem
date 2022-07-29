@@ -1,12 +1,8 @@
 import click
 
-from .configure import configure
-
 from .check import check
-
-from .console import Console
-
-c = Console()
+from .configure import configure
+from .repos import repo
 
 
 @click.group(
@@ -19,6 +15,7 @@ def cli():
 
 cli.add_command(check)
 cli.add_command(configure)
+cli.add_command(repo)
 
 if __name__ == "__main__":
     cli()
