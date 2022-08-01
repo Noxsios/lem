@@ -17,7 +17,7 @@ def check():
 @check.command()
 def vpc():
     c.command(f"aws ec2 describe-vpcs | grep {vpc_id}")
-    vpc_id = get_config()["vpc-id"]
+    vpc_id = get_config("vpc-id")
 
     ec2 = boto3.resource("ec2")
 

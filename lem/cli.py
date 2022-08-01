@@ -1,5 +1,7 @@
 import click
 
+from .k3d import k3d
+
 from .check import check
 from .configure import configure
 from .repos import repo
@@ -16,6 +18,7 @@ def cli():
 cli.add_command(check)
 cli.add_command(configure)
 cli.add_command(repo)
+cli.add_command(k3d)
 
 if __name__ == "__main__":
     cli()
