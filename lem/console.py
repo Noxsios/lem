@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from os import environ
 
 import emoji
 import inquirer
@@ -31,6 +32,10 @@ class Console:
     term = Terminal()
     log_level = "info"
     spinner = Halo(spinner="dots")
+    show_commands = False
+
+    def set_show_commands(self, b):
+        self.show_commands = b
 
     def emoji(self, message):
         return emoji.emojize(message)
@@ -58,4 +63,5 @@ class Console:
         return inquirer.prompt(questions, theme=theme)
 
     def command(self, message):
-        print(self.term.yellow("$ ") + self.term.blue(message))
+        if self.show_commands:
+            print(self.term.yellow("$ ") + self.term.blue(message))
