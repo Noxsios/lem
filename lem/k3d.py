@@ -20,18 +20,9 @@ def k3d():
 @click.option("-b", "--big", is_flag=True)
 @click.option("-p", "--private", is_flag=True)
 @click.option("-m", "--metal", is_flag=True)
-def create(show_commands, big, private, metal):
+def up(show_commands, big, private, metal):
     c.set_show_commands(show_commands)
-    opt = {}
     key_name = get_config("key-name")
-    if big:
-        c.info("Will use large m5a.4xlarge spot instance")
-        opt["InstSize"] = "m5a.4xlarge"
-        opt["SpotPrice"] = "0.69"
-    else:
-        c.info("Will use standard t3a.2xlarge spot instance")
-        opt["InstSize"] = "t3a.2xlarge"
-        opt["SpotPrice"] = "0.35"
 
     client = boto3.client("ec2")
 
@@ -143,28 +134,65 @@ def create(show_commands, big, private, metal):
                 GroupId=sg_id,
             )
             print(json.dumps(auth, indent=2))
+            # TODO: what comes after this?
         else:
             c.info("Granting all port access")
             auth = client.authorize_security_group_ingress(
                 IpProtocol="all", CidrIp=public_ip_cidr, GroupId=sg_id
             )
+            print(json.dumps(auth, indent=2))
 
-    # line 187
+    launch_spec = {
+        "ImageId": get_config("ami-id"),
+        "InstanceType": "",
+        "KeyName": key_name,
+        "SecurityGroupIds": [sg_id],
+        "BlockDeviceMappings": [
+            {
+                "DeviceName": "/dev/sda1",
+                "Ebs": {
+                    "DeletionOnTermination": True,
+                    "VolumeType": "gp2",
+                    "VolumeSize": 120,
+                },
+            }
+        ],
+    }
+    if big:
+        c.info("Will use large m5a.4xlarge spot instance")
+        launch_spec["InstanceType"] = "m5a.4xlarge"
+        spot_price = "0.69"
+    else:
+        c.info("Will use standard t3a.2xlarge spot instance")
+        launch_spec["InstanceType"] = "t3a.2xlarge"
+        spot_price = "0.35"
 
-    # TODO: query AMIs and get Ubuntu 20 AMIs, then prompt user which to use, include as part of `configure`?
+    c.spinner.start("Requesting an EC2 spot instance")
+    c.command("aws ec2 request-spot-instances ...")
+    spot_inst_res = client.request_spot_instances(
+        InstanceCount=1,
+        Type="one-time",
+        SpotPrice=spot_price,
+        LaunchSpecification=launch_spec,
+        TagSpecifications=[
+            {
+                "ResourceType": "spot-instances-request",
+                "Tags": [
+                    {
+                        "Key": "Name",
+                        "Value": f"{key_name}-spot-request",
+                    }
+                ],
+            }
+        ],
+    )
+    c.spinner.stop_and_persist("Request completed")
 
-    # ec2 = boto3.resource("ec2")
-    # instances = ec2.create_instances(
-    #     ImageId=get_config("ami-id"),
-    #     MinCount=1,
-    #     MaxCount=1,
-    #     InstanceType=opt["InstSize"],
-    #     KeyName=get_config("key-name"),
-    # )
+    # line 279
 
 
 @k3d.command()
-def destroy():
+def down():
     client = boto3.client("ec2")
 
     resp = client.delete_key_pair(KeyName=get_config("key-name"))

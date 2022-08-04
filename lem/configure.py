@@ -89,6 +89,7 @@ def set_config(key, val):
 @click.command()
 def configure():
     config = c.prompt(configure_questions)
+    config["ami-id"] = config["ami-id"].split(" ")[0]
 
     os.makedirs(Path.home().joinpath(".p1-lem"), exist_ok=True)
 
