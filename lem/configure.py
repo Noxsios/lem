@@ -1,6 +1,7 @@
 import os
 from pathlib import Path
 import boto3
+from datetime import datetime
 
 import click
 import inquirer
@@ -19,6 +20,32 @@ base_config = {
     "last-used-k3d-options": {},
 }
 
+ubuntu_20_04_amis = boto3.client("ec2").describe_images(
+    Filters=[
+        {
+            "Name": "name",
+            "Values": ["ubuntu/images/hvm-ssd/ubuntu-focal-20.04-amd64-server*"],
+        },
+        {"Name": "architecture", "Values": ["x86_64"]},
+    ],
+    IncludeDeprecated=False,
+)["Images"]
+
+ubuntu_20_04_five_latest = sorted(
+    ubuntu_20_04_amis, key=lambda img: img["CreationDate"], reverse=True
+)[:5]
+
+ubuntu_20_04_choices = list(
+    map(
+        lambda img: img["ImageId"]
+        + " "
+        + datetime.strptime(img["CreationDate"], r"%Y-%m-%dT%H:%M:%S.%fZ").isoformat(
+            sep=" "
+        ),
+        ubuntu_20_04_five_latest,
+    )
+)
+
 configure_questions = [
     inquirer.Path(
         "p1-dev-path",
@@ -26,12 +53,17 @@ configure_questions = [
         default="~/dev/p1",
     ),
     inquirer.Text("vpc-id", message="AWS VPC ID", default=base_config["vpc-id"]),
-    inquirer.Text("ami-id", message="AWS AMI ID", default=base_config["ami-id"]),
     inquirer.Text(
         "key-name",
         message="AWS Key Name",
         default=boto3.client("sts").get_caller_identity()["Arn"].split("/")[-1]
         + "-dev",
+    ),
+    inquirer.List(
+        "ami-id",
+        message="AMI (Ubuntu 20.04)",
+        choices=ubuntu_20_04_choices,
+        default=base_config["ami-id"],
     ),
 ]
 
@@ -63,3 +95,5 @@ def configure():
     with config_path.open("w") as f:
         YAML().dump(config, f)
         f.close()
+
+    c.info("Config saved to ~/.p1-lem/config.yaml")
