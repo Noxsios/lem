@@ -20,7 +20,7 @@ def repo():
 
 @repo.command()
 def clone():
-    root = Path(get_config()["p1-dev-path"]).expanduser().resolve()
+    root = Path(get_config("p1-dev-path")).expanduser().resolve()
 
     cloned_pkgs = [f.name for f in Path(root).iterdir() if f.is_dir()]
 
