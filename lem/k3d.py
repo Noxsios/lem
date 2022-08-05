@@ -1,6 +1,8 @@
+from email import message
 import click
 import boto3
 from botocore.exceptions import ClientError
+import inquirer
 from requests import get
 from .configure import get_config
 from pathlib import Path
@@ -167,8 +169,8 @@ def up(show_commands, big, private, metal):
         launch_spec["InstanceType"] = "t3a.2xlarge"
         spot_price = "0.35"
 
-    c.spinner.start("Requesting an EC2 spot instance")
     c.command("aws ec2 request-spot-instances ...")
+    c.spinner.start("Requesting an EC2 spot instance")
     spot_inst_res = client.request_spot_instances(
         InstanceCount=1,
         Type="one-time",
@@ -187,6 +189,7 @@ def up(show_commands, big, private, metal):
         ],
     )
     c.spinner.stop_and_persist("Request completed")
+    print(json.dumps(spot_inst_res, indent=2))
 
     # line 279
 
@@ -195,6 +198,51 @@ def up(show_commands, big, private, metal):
 def down():
     client = boto3.client("ec2")
 
-    resp = client.delete_key_pair(KeyName=get_config("key-name"))
+    running_inst = client.describe_instances(
+        Filters=[
+            {
+                "Name": "key-name",
+                # "Values": ["Jordan.Olachea-dev"]
+                "Values": [get_config("key-name")]
+            },
+            {"Name": "instance-state-name", "Values": ["running"]},
+        ]
+    )
 
-    print(resp)
+    inst_to_delete = []
+
+    for reservation in running_inst["Reservations"]:
+        insts = list(
+            map(
+                lambda i: i["InstanceId"]
+                + " created on "
+                + i["LaunchTime"].strftime("%m-%d-%Y"),
+                reservation["Instances"],
+            )
+        )
+        c.warning(f"Planning to delete: {', '.join(insts)}")
+        ans = c.prompt(
+            [
+                inquirer.Confirm(
+                    "confirm-deletion",
+                    message="Are you sure you want to delete this instance(s)?",
+                    default=True,
+                )
+            ]
+        )
+        if ans["confirm-deletion"]:
+            for id in insts:
+                inst_to_delete.append(id)
+
+    if len(inst_to_delete) > 0:
+        c.spinner.start("Requesting EC2 instance deletions")
+        client.terminate_instances(InstanceIds=inst_to_delete)
+
+        waiter = client.get_waiter("instance-terminated")
+        waiter.wait(InstanceIds=inst_to_delete)
+        c.spinner.succeed("Instances have been deleted")
+    elif len(running_inst["Reservations"]) > 0:
+        c.info("No instances selected, Goodbye")
+        exit()
+    else:
+        c.info(f"There are no running instances attached to key-name ({get_config('key-name')})")
