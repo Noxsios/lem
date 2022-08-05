@@ -1,8 +1,8 @@
 import os
-from pathlib import Path
-import boto3
 from datetime import datetime
+from pathlib import Path
 
+import boto3
 import click
 import inquirer
 from ruamel.yaml import YAML
@@ -71,11 +71,13 @@ config_path = Path.home().joinpath(".p1-lem/config.yaml")
 
 cached_config = dict()
 
+
 def get_config(key):
     if key not in cached_config:
         config = YAML().load(config_path)
         cached_config[key] = config[key]
     return cached_config[key]
+
 
 def set_config(key, val):
     config = YAML().load(config_path)

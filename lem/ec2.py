@@ -1,13 +1,15 @@
-from email import message
-import click
-import boto3
-from botocore.exceptions import ClientError
-import inquirer
-from requests import get
-from .configure import get_config
-from pathlib import Path
-from .console import Console
 import json
+from email import message
+from pathlib import Path
+
+import boto3
+import click
+import inquirer
+from botocore.exceptions import ClientError
+from requests import get
+
+from .configure import get_config
+from .console import Console
 
 c = Console()
 

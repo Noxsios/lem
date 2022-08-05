@@ -1,9 +1,8 @@
 import click
 
-from .ec2 import ec2
-
 from .check import check
 from .configure import configure
+from .ec2 import ec2
 from .repos import repo
 
 

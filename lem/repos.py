@@ -1,3 +1,4 @@
+import subprocess as sp
 from pathlib import Path
 
 import click
@@ -7,8 +8,6 @@ from ruamel.yaml import YAML
 
 from .configure import get_config
 from .console import Console
-
-import subprocess as sp
 
 c = Console()
 
