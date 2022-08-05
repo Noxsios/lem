@@ -49,6 +49,12 @@ lem check username
 
 # check all needed dev cli tools are installed
 lem check tools
+
+# create a new EC2 spot instance on BB GovCloud
+lem ec2 start
+
+# delete your EC2 instance
+lem ec2 terminate
 ```
 
 ## Developing
