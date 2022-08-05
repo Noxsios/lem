@@ -69,13 +69,13 @@ configure_questions = [
 
 config_path = Path.home().joinpath(".p1-lem/config.yaml")
 
+cached_config = dict()
 
 def get_config(key):
-    config = YAML().load(config_path)
-    if key:
-        return config[key]
-    return config
-
+    if key not in cached_config:
+        config = YAML().load(config_path)
+        cached_config[key] = config[key]
+    return cached_config[key]
 
 def set_config(key, val):
     config = YAML().load(config_path)

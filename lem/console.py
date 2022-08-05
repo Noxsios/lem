@@ -32,7 +32,6 @@ class Console:
     term = Terminal()
     log_level = "info"
     spinner = Halo(spinner="dots")
-    show_commands = False
 
     def set_show_commands(self, b):
         self.show_commands = b
@@ -63,5 +62,4 @@ class Console:
         return inquirer.prompt(questions, theme=theme)
 
     def command(self, message):
-        if self.show_commands:
-            print(self.term.yellow("$ ") + self.term.blue(message))
+        print(self.term.yellow("$ ") + self.term.blue(message))

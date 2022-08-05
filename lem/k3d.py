@@ -21,10 +21,17 @@ def k3d():
 @click.option("-b", "--big", is_flag=True)
 @click.option("-p", "--private", is_flag=True)
 @click.option("-m", "--metal", is_flag=True)
-def up(show_commands, big, private, metal):
+def up(big, private, metal):
     key_name = get_config("key-name")
 
     client = boto3.client("ec2")
+
+    running_inst = get_current_running()
+
+    if len(running_inst) > 0:
+        c.error("You currently have 1 or more dev instances running")
+        c.command("lem k3d down")
+        return
 
     c.spinner.start("Checking key-pair exists")
     try:
@@ -132,7 +139,7 @@ def up(show_commands, big, private, metal):
             {
                 "DeviceName": "/dev/sda1",
                 "Ebs": {
-                    "DeletionOnTermination": True,
+                    "DeleteOnTermination": True,
                     "VolumeType": "gp2",
                     "VolumeSize": 120,
                 },
@@ -163,33 +170,58 @@ def up(show_commands, big, private, metal):
                         "Value": f"{key_name}-spot-request",
                     }
                 ],
-            }
+            },
         ],
     )
-    c.spinner.stop_and_persist("Request completed")
-    print(json.dumps(spot_inst_res, indent=2))
 
     # line 279
+    waiter = client.get_waiter("spot_instance_request_fulfilled")
+    waiter.wait(
+        SpotInstanceRequestIds=[
+            spot_inst_res["SpotInstanceRequests"][0]["SpotInstanceRequestId"]
+        ]
+    )
+    c.spinner.succeed("Request completed")
+
+    c.spinner.start("Tagging EC2 instance")
+    inst_id = client.describe_spot_instance_requests(
+        Filters=[
+            {
+                "Name": "instance-id",
+                "Value": spot_inst_res["SpotInstanceRequests"][0]["SpotInstanceRequestId"]
+            }
+        ]
+    )
+    print(inst_id)
+
+
+def get_current_running():
+    client = boto3.client("ec2")
+
+    c.spinner.start("Getting currently running EC2 instances")
+    running_inst = client.describe_instances(
+        Filters=[
+            {
+                "Name": "key-name",
+                "Values": [get_config("key-name")]
+            },
+            {"Name": "instance-state-name", "Values": ["running"]},
+        ]
+    )["Reservations"]
+    c.spinner.succeed("Got currently running EC2 instances ({})".format(len(running_inst)))
+
+    return running_inst
 
 
 @k3d.command()
 def down():
     client = boto3.client("ec2")
 
-    running_inst = client.describe_instances(
-        Filters=[
-            {
-                "Name": "key-name",
-                # "Values": ["Jordan.Olachea-dev"]
-                "Values": [get_config("key-name")]
-            },
-            {"Name": "instance-state-name", "Values": ["running"]},
-        ]
-    )
+    running_inst = get_current_running()
 
     inst_to_delete = []
 
-    for reservation in running_inst["Reservations"]:
+    for reservation in running_inst:
         insts = list(
             map(
                 lambda i: i["InstanceId"]
@@ -209,18 +241,19 @@ def down():
             ]
         )
         if ans["confirm-deletion"]:
-            for id in insts:
-                inst_to_delete.append(id)
+            for inst_str in insts:
+                inst_to_delete.append(inst_str.split(" ")[0])
 
     if len(inst_to_delete) > 0:
-        c.spinner.start("Requesting EC2 instance deletions")
+        c.spinner.start("Deleting {} EC2 instance(s)...".format(len(inst_to_delete)))
         client.terminate_instances(InstanceIds=inst_to_delete)
 
-        waiter = client.get_waiter("instance-terminated")
+        waiter = client.get_waiter("instance_terminated")
         waiter.wait(InstanceIds=inst_to_delete)
         c.spinner.succeed("Instances have been deleted")
     elif len(running_inst["Reservations"]) > 0:
         c.info("No instances selected, Goodbye")
-        exit()
     else:
-        c.info(f"There are no running instances attached to key-name ({get_config('key-name')})")
+        c.info(
+            f"There are no running instances attached to key-name ({get_config('key-name')})"
+        )
