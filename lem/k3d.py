@@ -18,29 +18,21 @@ def k3d():
 
 
 @k3d.command()
-@click.option("--show-commands", is_flag=True, default=False)
 @click.option("-b", "--big", is_flag=True)
 @click.option("-p", "--private", is_flag=True)
 @click.option("-m", "--metal", is_flag=True)
 def up(show_commands, big, private, metal):
-    c.set_show_commands(show_commands)
     key_name = get_config("key-name")
 
     client = boto3.client("ec2")
 
     c.spinner.start("Checking key-pair exists")
     try:
-        c.command(
-            f"aws ec2 describe-key-pairs --output json --no-cli-pager --key-names {key_name}"
-        )
         client.describe_key_pairs(KeyNames=[key_name])
         c.spinner.succeed(f"key-pair {key_name} exists")
     except ClientError as e:
         c.spinner.fail(str(e))
         c.info("Creating new key pair: {}".format(key_name))
-        c.command(
-            f"aws ec2 create-key-pair --output json --no-cli-pager --key-name {key_name} | jq -r '.KeyMaterial' > ~/.ssh/{key_name}.pem"
-        )
 
         key_pair = client.create_key_pair(
             KeyName=key_name, DryRun=False, KeyType="rsa", KeyFormat="pem"
@@ -51,16 +43,12 @@ def up(show_commands, big, private, metal):
             f.write(key_pair["KeyMaterial"])
             f.close()
         # this is `chmod 600`
-        c.command(f"chmod 600 ~/.ssh/{key_name}.pem")
         key_path.chmod(33152)
 
     sg_name = key_name
     c.spinner.start("Checking security group exists")
     sg_id = None
     try:
-        c.command(
-            f"aws ec2 describe-security-groups --output json --no-cli-pager --group-names {sg_name}"
-        )
         sg = client.describe_security_groups(GroupNames=[sg_name])
         c.spinner.succeed(f"Security group {sg_name} exists")
 
@@ -75,15 +63,6 @@ def up(show_commands, big, private, metal):
         c.spinner.fail(str(e))
         c.info("Creating new security group: {sg_name}")
 
-        c.command(
-            f"aws ec2 create-security-group --output json --no-cli-pager --description 'Security group for {sg_name}' --group-name {sg_name} --vpc-id {get_config('vpc-id')}"
-        )
-        c.command(
-            f"SecurityGroupId=$(aws ec2 describe-security-groups --output json --no-cli-pager --group-names {sg_name} --query 'SecurityGroups[0].GroupId' --output text)"
-        )
-        c.command(
-            f"aws ec2 create-tags --resources ${{SecurityGroupId}} --tags Key=Name,Value={sg_name}"
-        )
         sg = client.create_security_group(
             Description="Security group for {} Big Bang EC2 dev env".format(
                 key_name[:-4]
@@ -169,7 +148,6 @@ def up(show_commands, big, private, metal):
         launch_spec["InstanceType"] = "t3a.2xlarge"
         spot_price = "0.35"
 
-    c.command("aws ec2 request-spot-instances ...")
     c.spinner.start("Requesting an EC2 spot instance")
     spot_inst_res = client.request_spot_instances(
         InstanceCount=1,
