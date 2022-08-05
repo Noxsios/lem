@@ -173,7 +173,6 @@ def start(big, private, metal):
         ],
     )
 
-    # line 279
     waiter = client.get_waiter("spot_instance_request_fulfilled")
     sir_id = spot_inst_res["SpotInstanceRequests"][0]["SpotInstanceRequestId"]
     waiter.wait(SpotInstanceRequestIds=[sir_id])
@@ -261,6 +260,7 @@ def terminate():
 
 @ec2.command()
 def provision():
+    # line 310
     pass
 
 
