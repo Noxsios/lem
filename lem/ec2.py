@@ -13,15 +13,14 @@ c = Console()
 
 
 @click.group()
-def k3d():
+def ec2():
     pass
 
 
-@k3d.command()
+@ec2.command()
 @click.option("-b", "--big", is_flag=True)
 @click.option("-p", "--private", is_flag=True)
-@click.option("-m", "--metal", is_flag=True)
-def up(big, private, metal):
+def start(big, private, metal):
     key_name = get_config("key-name")
 
     client = boto3.client("ec2")
@@ -30,7 +29,7 @@ def up(big, private, metal):
 
     if len(running_inst) > 0:
         c.error("You currently have 1 or more dev instances running")
-        c.command("lem k3d down")
+        c.command("lem ec2 down")
         return
 
     c.spinner.start("Checking key-pair exists")
@@ -176,23 +175,25 @@ def up(big, private, metal):
 
     # line 279
     waiter = client.get_waiter("spot_instance_request_fulfilled")
-    waiter.wait(
-        SpotInstanceRequestIds=[
-            spot_inst_res["SpotInstanceRequests"][0]["SpotInstanceRequestId"]
-        ]
-    )
-    c.spinner.succeed("Request completed")
+    sir_id = spot_inst_res["SpotInstanceRequests"][0]["SpotInstanceRequestId"]
+    waiter.wait(SpotInstanceRequestIds=[sir_id])
+    c.spinner.succeed(spot_inst_res["SpotInstanceRequests"][0]["Status"]["Message"])
 
-    c.spinner.start("Tagging EC2 instance")
-    inst_id = client.describe_spot_instance_requests(
-        Filters=[
-            {
-                "Name": "instance-id",
-                "Value": spot_inst_res["SpotInstanceRequests"][0]["SpotInstanceRequestId"]
-            }
-        ]
+    c.spinner.start(f"Tagging EC2 instance created from {sir_id}")
+    inst_req = client.describe_spot_instance_requests(SpotInstanceRequestIds=[sir_id])
+    inst_id = inst_req["SpotInstanceRequests"][0]["InstanceId"]
+    client.create_tags(Resources=[inst_id], Tags=[{"Key": "Name", "Value": key_name}])
+    c.spinner.text = (
+        f"Instance ({inst_id}) tagged, now waiting for instance to be (running)"
     )
-    print(inst_id)
+    waiter = client.get_waiter("instance_running")
+    waiter.wait(InstanceIds=[inst_id])
+    c.spinner.succeed(f"Instance ({inst_id}) is ready")
+    inst = client.describe_instances(InstanceIds=[inst_id])["Reservations"][0][
+        "Instances"
+    ][0]
+    c.info("Private IP: {}".format(inst["PrivateIpAddress"]))
+    c.info("Public IP: {}".format(inst["PublicIpAddress"]))
 
 
 def get_current_running():
@@ -201,20 +202,19 @@ def get_current_running():
     c.spinner.start("Getting currently running EC2 instances")
     running_inst = client.describe_instances(
         Filters=[
-            {
-                "Name": "key-name",
-                "Values": [get_config("key-name")]
-            },
+            {"Name": "key-name", "Values": [get_config("key-name")]},
             {"Name": "instance-state-name", "Values": ["running"]},
         ]
     )["Reservations"]
-    c.spinner.succeed("Got currently running EC2 instances ({})".format(len(running_inst)))
+    c.spinner.succeed(
+        "Got currently running EC2 instances ({})".format(len(running_inst))
+    )
 
     return running_inst
 
 
-@k3d.command()
-def down():
+@ec2.command()
+def terminate():
     client = boto3.client("ec2")
 
     running_inst = get_current_running()
@@ -251,9 +251,20 @@ def down():
         waiter = client.get_waiter("instance_terminated")
         waiter.wait(InstanceIds=inst_to_delete)
         c.spinner.succeed("Instances have been deleted")
-    elif len(running_inst["Reservations"]) > 0:
+    elif len(running_inst) > 0:
         c.info("No instances selected, Goodbye")
     else:
         c.info(
             f"There are no running instances attached to key-name ({get_config('key-name')})"
         )
+
+
+@ec2.command()
+def provision():
+    pass
+
+
+@ec2.command()
+@click.option("-m", "--metal", is_flag=True)
+def k3d(metal):
+    pass

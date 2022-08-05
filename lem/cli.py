@@ -1,6 +1,6 @@
 import click
 
-from .k3d import k3d
+from .ec2 import ec2
 
 from .check import check
 from .configure import configure
@@ -18,7 +18,7 @@ def cli():
 cli.add_command(check)
 cli.add_command(configure)
 cli.add_command(repo)
-cli.add_command(k3d)
+cli.add_command(ec2)
 
 if __name__ == "__main__":
     cli()
