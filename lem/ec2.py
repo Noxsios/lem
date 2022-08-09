@@ -1,6 +1,14 @@
+import base64
 import json
-from email import message
 from pathlib import Path
+from time import sleep
+import paramiko
+from paramiko import (
+    BadHostKeyException,
+    AuthenticationException,
+    SSHException,
+    ssh_exception,
+)
 
 import boto3
 import click
@@ -8,7 +16,7 @@ import inquirer
 from botocore.exceptions import ClientError
 from requests import get
 
-from .configure import get_config
+from .configure import get_config, set_config
 from .console import Console
 
 c = Console()
@@ -22,7 +30,7 @@ def ec2():
 @ec2.command()
 @click.option("-b", "--big", is_flag=True)
 @click.option("-p", "--private", is_flag=True)
-def start(big, private, metal):
+def start(big, private):
     key_name = get_config("key-name")
 
     client = boto3.client("ec2")
@@ -31,7 +39,7 @@ def start(big, private, metal):
 
     if len(running_inst) > 0:
         c.error("You currently have 1 or more dev instances running")
-        c.command("lem ec2 down")
+        c.command("lem ec2 terminate")
         return
 
     c.spinner.start("Checking key-pair exists")
@@ -146,7 +154,13 @@ def start(big, private, metal):
                 },
             }
         ],
+        "UserData": str(
+            base64.b64encode(
+                Path.home().joinpath(".p1-lem/userdata.txt").open("rb").read()
+            ).decode("ascii")
+        ),
     }
+    c.info("Will use ~/.p1-lem/userdata.txt")
     if big:
         c.info("Will use large m5a.4xlarge spot instance")
         launch_spec["InstanceType"] = "m5a.4xlarge"
@@ -193,8 +207,46 @@ def start(big, private, metal):
     inst = client.describe_instances(InstanceIds=[inst_id])["Reservations"][0][
         "Instances"
     ][0]
+
+    c.spinner.start("Provisioning new instance w/ dev dependencies")
+    with paramiko.SSHClient() as ssh:
+        ssh_key = paramiko.RSAKey.from_private_key_file(
+            str(Path.home() / ".ssh" / key_name) + ".pem"
+        )
+        ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+        attempts = 0
+        while attempts < 10:
+            try:
+                ssh.connect(inst["PublicIpAddress"], pkey=ssh_key, username="ubuntu")
+                c.spinner.text = "Running ~/install-deps.sh"
+                stdin, stdout, stderr = ssh.exec_command("/home/ubuntu/install-deps.sh")
+                stdout.channel.set_combine_stderr(True)
+                out = stdout.read().decode().strip()
+                if (
+                    out
+                    == "bash: /home/ubuntu/install-deps.sh: No such file or directory"
+                ):
+                    continue
+                break
+            except (
+                BadHostKeyException,
+                AuthenticationException,
+                SSHException,
+                ssh_exception.NoValidConnectionsError,
+            ) as e:
+                c.spinner.text = "Unable to ssh, retrying in 5s"
+                attempts += 1
+                sleep(5)
+        c.spinner.succeed("Successfully ran ~/install-deps.sh")
+        ssh.close()
+
     c.info("Private IP: {}".format(inst["PrivateIpAddress"]))
     c.info("Public IP: {}".format(inst["PublicIpAddress"]))
+    c.info("Connect w/")
+    c.command(
+        f"ssh -i ~/.ssh/{key_name}.pem -o StrictHostKeyChecking=no ubuntu@{inst['PublicIpAddress']}"
+    )
+    set_config("current-instance-id", inst_id)
 
 
 def get_current_running():
@@ -246,12 +298,12 @@ def terminate():
                 inst_to_delete.append(inst_str.split(" ")[0])
 
     if len(inst_to_delete) > 0:
-        c.spinner.start("Deleting {} EC2 instance(s)...".format(len(inst_to_delete)))
+        c.spinner.start("Terminating {} EC2 instance(s)...".format(len(inst_to_delete)))
         client.terminate_instances(InstanceIds=inst_to_delete)
 
         waiter = client.get_waiter("instance_terminated")
         waiter.wait(InstanceIds=inst_to_delete)
-        c.spinner.succeed("Instances have been deleted")
+        c.spinner.succeed("Instances have been terminated")
     elif len(running_inst) > 0:
         c.info("No instances selected, Goodbye")
     else:

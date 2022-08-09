@@ -1,0 +1,44 @@
+#!/usr/bin/bash
+sysctl -w vm.max_map_count=524288
+echo 'vm.max_map_count=524288' > /etc/sysctl.d/vm-max_map_count.conf
+echo 'fs.file-max=131072' > /etc/sysctl.d/fs-file-max.conf
+sysctl -p
+ulimit -n 131072
+ulimit -u 8192
+modprobe xt_REDIRECT
+modprobe xt_owner
+modprobe xt_statistic
+
+# shutdown after 8 hours
+echo '0 8 * * * /usr/sbin/shutdown -h now' | crontab -
+
+curl -fsSL https://get.docker.com -o /home/ubuntu/get-docker.sh
+chown ubuntu /home/ubuntu/get-docker.sh
+chmod +x /home/ubuntu/get-docker.sh
+
+curl -fsSLo /usr/share/keyrings/kubernetes-archive-keyring.gpg https://packages.cloud.google.com/apt/doc/apt-key.gpg
+echo "deb [signed-by=/usr/share/keyrings/kubernetes-archive-keyring.gpg] https://apt.kubernetes.io/ kubernetes-xenial main" | tee /etc/apt/sources.list.d/kubernetes.list
+
+curl -fsSL https://raw.githubusercontent.com/rancher/k3d/main/install.sh -o /home/ubuntu/k3d-install.sh
+chown ubuntu /home/ubuntu/k3d-install.sh
+chmod +x /home/ubuntu/k3d-install.sh
+
+cat << EOF > /home/ubuntu/install-deps.sh
+#!/usr/bin/env bash
+
+sudo apt -y update
+sudo apt install -y apt-transport-https ca-certificates curl gnupg-agent software-properties-common kubectl jq tree vim nano bat
+
+echo
+sh ./get-docker.sh
+sudo usermod -aG docker ubuntu
+echo
+TAG=v5.4.4 bash ./k3d-install.sh
+echo
+
+echo 'alias k="kubectl"' >> ~/.bashrc
+echo 'alias cat="batcat -pp"' >> ~/.bashrc
+EOF
+
+chown ubuntu /home/ubuntu/install-deps.sh
+chmod +x /home/ubuntu/install-deps.sh

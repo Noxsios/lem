@@ -1,6 +1,7 @@
 import os
 from datetime import datetime
 from pathlib import Path
+import shutil
 
 import boto3
 import click
@@ -29,6 +30,10 @@ ubuntu_20_04_amis = boto3.client("ec2").describe_images(
         {"Name": "architecture", "Values": ["x86_64"]},
     ],
     IncludeDeprecated=False,
+    # https://ubuntu.com/server/docs/cloud-images/amazon-ec2
+    # CTRL+F `Ownership Verification`
+    # this is the owner-id for Canonical on GovCloud
+    Owners=["513442679011", "self"],
 )["Images"]
 
 ubuntu_20_04_five_latest = sorted(
@@ -90,10 +95,19 @@ def set_config(key, val):
 
 @click.command()
 def configure():
+    # TODO: separate config from AMI-ID, have a y/N prompt beforehand to change, will improve speed
     config = c.prompt(configure_questions)
+    if config is None:
+        exit()
+
     config["ami-id"] = config["ami-id"].split(" ")[0]
 
     os.makedirs(Path.home().joinpath(".p1-lem"), exist_ok=True)
+
+    userdata_config = Path.home().joinpath(".p1-lem/userdata.txt")
+    if userdata_config.exists() is False:
+        userdata = Path.resolve(Path(__file__).parent) / "userdata.txt"
+        shutil.copy2(userdata, userdata_config)
 
     with config_path.open("w") as f:
         YAML().dump(config, f)
