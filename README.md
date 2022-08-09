@@ -7,7 +7,7 @@ Features:
 - Clone Big Bang repo's interactively --> `lem repo clone`
 - Check access to Big Bang's AWS GovCloud acc (vpc+username) --> `lem check vpc|username`
 - Check if you have all the developer tools you will need (`kubectl`, `helm`, `yq`, etc...) --> `lem check tools`, plus I also included my own list w/ the `--extra` flag.
-- Standup + teardown an Ubuntu 20.04 EC2 spot instance w/ `lem ec2 up|down`
+- Standup + teardown an Ubuntu 20.04 EC2 spot instance w/ `lem ec2 start|terminate`
 - WIP: Autoconfigure spot instance w/ dev tools + docker + k3d
 - WIP: Deploy Big Bang + run health checks
 
