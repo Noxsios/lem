@@ -91,4 +91,4 @@ data:
 EOF
 
 chown -R ubuntu $provision
-chmod +x "$provision/*.sh"
+chmod +x $provision/*.sh
