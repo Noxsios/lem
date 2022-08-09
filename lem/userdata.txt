@@ -9,21 +9,19 @@ modprobe xt_REDIRECT
 modprobe xt_owner
 modprobe xt_statistic
 
-# shutdown after 8 hours
 echo '0 8 * * * /usr/sbin/shutdown -h now' | crontab -
 
-curl -fsSL https://get.docker.com -o /home/ubuntu/get-docker.sh
-chown ubuntu /home/ubuntu/get-docker.sh
-chmod +x /home/ubuntu/get-docker.sh
+mkdir -p /home/ubuntu/provision
+provision=/home/ubuntu/provision
+
+curl -fsSL https://get.docker.com -o $provision/get-docker.sh
 
 curl -fsSLo /usr/share/keyrings/kubernetes-archive-keyring.gpg https://packages.cloud.google.com/apt/doc/apt-key.gpg
 echo "deb [signed-by=/usr/share/keyrings/kubernetes-archive-keyring.gpg] https://apt.kubernetes.io/ kubernetes-xenial main" | tee /etc/apt/sources.list.d/kubernetes.list
 
-curl -fsSL https://raw.githubusercontent.com/rancher/k3d/main/install.sh -o /home/ubuntu/k3d-install.sh
-chown ubuntu /home/ubuntu/k3d-install.sh
-chmod +x /home/ubuntu/k3d-install.sh
+curl -fsSL https://raw.githubusercontent.com/rancher/k3d/main/install.sh -o $provision/k3d-install.sh
 
-cat << EOF > /home/ubuntu/install-deps.sh
+cat << EOF > $provision/install-deps.sh
 #!/usr/bin/env bash
 
 sudo apt -y update
@@ -40,5 +38,57 @@ echo 'alias k="kubectl"' >> ~/.bashrc
 echo 'alias cat="batcat -pp"' >> ~/.bashrc
 EOF
 
-chown ubuntu /home/ubuntu/install-deps.sh
-chmod +x /home/ubuntu/install-deps.sh
+cat << EOF > $provision/k3d-config.yaml
+apiVersion: k3d.io/v1alpha2
+kind: Simple
+servers: 1
+agents: 3
+kubeAPI:
+  host: ""
+  hostIP: "127.0.0.1"
+  hostPort: "6443"
+volumes:
+  - volume: /etc/machine-id:/etc/machine-id
+    nodeFilters:
+      - agent[0,1,2]
+  - volume: /etc/machine-id:/etc/machine-id
+    nodeFilters:
+      - server[0]
+
+options:
+  k3s:
+    extraServerArgs:
+      - --disable=traefik
+      - --disable=metrics-server
+      - --disable=servicelb
+
+ports:
+  - port: 80:80
+    nodeFilters:
+      - loadbalancer
+  - port: 443:443
+      nodeFilters:
+      - loadbalancer
+EOF
+
+cat << EOF > $provision/metallb-config.yaml
+# docker network create k3d-network --driver=bridge --subnet=172.20.0.0/16 --gateway 172.20.0.1
+# kubectl create -f https://raw.githubusercontent.com/metallb/metallb/v0.10.2/manifests/namespace.yaml
+# kubectl create -f https://raw.githubusercontent.com/metallb/metallb/v0.10.2/manifests/metallb.yaml
+# k3d cluster create ... --network k3d-network
+apiVersion: v1
+kind: ConfigMap
+metadata:
+    namespace: metallb-system
+    name: config
+data:
+    config: |
+    address-pools:
+    - name: default
+        protocol: layer2
+        addresses:
+        - 172.20.1.240-172.20.1.243
+EOF
+
+chown -R ubuntu $provision
+chmod +x "$provision/*.sh"
