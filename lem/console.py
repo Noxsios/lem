@@ -62,4 +62,4 @@ class Console:
         return inquirer.prompt(questions, theme=theme)
 
     def command(self, message):
-        print(self.term.yellow("$ ") + self.term.blue(message))
+        print(self.term.yellow("$ ") + self.term.mediumpurple2(message))

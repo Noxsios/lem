@@ -44,8 +44,6 @@ kind: Simple
 servers: 1
 agents: 3
 kubeAPI:
-  host: ""
-  hostIP: "127.0.0.1"
   hostPort: "6443"
 volumes:
   - volume: /etc/machine-id:/etc/machine-id
@@ -67,7 +65,7 @@ ports:
     nodeFilters:
       - loadbalancer
   - port: 443:443
-      nodeFilters:
+    nodeFilters:
       - loadbalancer
 EOF
 

@@ -30,7 +30,8 @@ def ec2():
 @ec2.command()
 @click.option("-b", "--big", is_flag=True)
 @click.option("-p", "--private", is_flag=True)
-def start(big, private):
+@click.option("-m", "--metal", is_flag=True)
+def start(big, private, metal):
     key_name = get_config("key-name")
 
     client = boto3.client("ec2")
@@ -218,13 +219,15 @@ def start(big, private):
         while attempts < 10:
             try:
                 ssh.connect(inst["PublicIpAddress"], pkey=ssh_key, username="ubuntu")
-                c.spinner.text = "Running ~/install-deps.sh"
-                stdin, stdout, stderr = ssh.exec_command("/home/ubuntu/install-deps.sh")
+                c.spinner.text = "Running ~/provision/install-deps.sh"
+                stdin, stdout, stderr = ssh.exec_command(
+                    "cd ~/provision && ./install-deps.sh"
+                )
                 stdout.channel.set_combine_stderr(True)
                 out = stdout.read().decode().strip()
                 if (
                     out
-                    == "bash: /home/ubuntu/install-deps.sh: No such file or directory"
+                    == "bash: /home/ubuntu/provision/install-deps.sh: No such file or directory"
                 ):
                     continue
                 break
@@ -237,16 +240,34 @@ def start(big, private):
                 c.spinner.text = "Unable to ssh, retrying in 5s"
                 attempts += 1
                 sleep(5)
-        c.spinner.succeed("Successfully ran ~/install-deps.sh")
+        c.spinner.succeed("Successfully ran ~/provision/install-deps.sh")
         ssh.close()
 
     c.info("Private IP: {}".format(inst["PrivateIpAddress"]))
     c.info("Public IP: {}".format(inst["PublicIpAddress"]))
     c.info("Connect w/")
-    c.command(
-        f"ssh -i ~/.ssh/{key_name}.pem -o StrictHostKeyChecking=no ubuntu@{inst['PublicIpAddress']}"
-    )
-    set_config("current-instance-id", inst_id)
+    base_ssh_command = f"ssh -i ~/.ssh/{key_name}.pem ubuntu@{inst['PublicIpAddress']}"
+    base_k3d_command = "k3d cluster create -c ~/provision/k3d-config.yaml"
+    c.command(base_ssh_command)
+    c.info("Start k3d w/")
+    if private and metal:
+        c.command(f"""{base_ssh_command} '{base_k3d_command} <extra args>"'""")
+    elif private:
+        c.command(f"""{base_ssh_command} '{base_k3d_command} <extra args>"'""")
+    elif metal:
+        c.command(f"""{base_ssh_command} '{base_k3d_command} <extra args>"'""")
+    else:
+        # public and no metal (default)
+        c.command(
+            f"""{base_ssh_command} '{base_k3d_command} --k3s-arg "--tls-san={inst["PublicIpAddress"]}@server:0"'"""
+        )
+
+    set_config("current-instance-ip", inst["PublicIpAddress"])
+
+    # k3d cluster create \
+    # --config ~/provision/k3d-config.yaml
+    # --k3s-arg "--tls-san=${access_ip}@server:0" \ # access_ip depends on whether <public> or <private>
+    # --network k3d-network \ # include ONLY if <metal>
 
 
 def get_current_running():
@@ -310,9 +331,3 @@ def terminate():
         c.info(
             f"There are no running instances attached to key-name ({get_config('key-name')})"
         )
-
-
-@ec2.command()
-@click.option("-m", "--metal", is_flag=True)
-def k3d(metal):
-    pass
