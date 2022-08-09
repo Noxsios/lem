@@ -313,12 +313,6 @@ def terminate():
 
 
 @ec2.command()
-def provision():
-    # line 310
-    pass
-
-
-@ec2.command()
 @click.option("-m", "--metal", is_flag=True)
 def k3d(metal):
     pass
