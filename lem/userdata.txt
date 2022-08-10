@@ -95,6 +95,13 @@ docker network create k3d-network --driver=bridge --subnet=172.20.0.0/16 --gatew
 kubectl create -f https://raw.githubusercontent.com/metallb/metallb/v0.10.2/manifests/namespace.yaml
 kubectl create -f https://raw.githubusercontent.com/metallb/metallb/v0.10.2/manifests/metallb.yaml
 kubectl create -f ~/provision/metallb-config.yaml
+
+# fix /etc/hosts for new cluster
+sudo sed -i '/bigbang.dev/d' /etc/hosts
+sudo bash -c "echo '## begin bigbang.dev section' >> /etc/hosts"
+sudo bash -c "echo 172.20.1.240  keycloak.bigbang.dev >> /etc/hosts"
+sudo bash -c "echo 172.20.1.241  gitlab.bigbang.dev >> /etc/hosts"
+sudo bash -c "echo '## end bigbang.dev section' >> /etc/hosts"
 EOF
 
 chown -R ubuntu $provision

@@ -260,17 +260,12 @@ def start(big, private, metal):
             c.error("Provision manually w/")
             c.command(base_ssh_command)
 
-    c.info("Private IP: {}".format(inst["PrivateIpAddress"]))
-    c.info("Public IP: {}".format(inst["PublicIpAddress"]))
-    c.info("Connect w/")
-
     base_ssh_command = f"ssh -i ~/.ssh/{key_name}.pem ubuntu@{inst['PublicIpAddress']}"
     base_k3d_command = "k3d cluster create -c ~/provision/k3d-config.yaml"
     metal_flag = "--network k3d-network"
     public_flag = f"--k3s-arg '--tls-san={inst['PublicIpAddress']}@server:0'"
     private_flag = f"--k3s-arg '--tls-san={inst['PrivateIpAddress']}@server:0'"
 
-    c.command(base_ssh_command)
     c.info("Starting k3d w/")
     if private and metal:
         k3d_start_command = f"{base_k3d_command} {private_flag} {metal_flag}"
@@ -319,7 +314,23 @@ def start(big, private, metal):
         c.info("To access your new cluster w/ kubectl:")
         c.command(f"export KUBECONFIG={str(dev_kubeconfig_path.expanduser())}")
 
-        set_config("current-instance-ip", inst["PublicIpAddress"])
+    c.info("Private IP: {}".format(inst["PrivateIpAddress"]))
+    c.info("Public IP: {}".format(inst["PublicIpAddress"]))
+    c.info("Connect w/")
+    c.command(base_ssh_command)
+    set_config("current-instance-ip", inst["PublicIpAddress"])
+    if private:
+        c.warning("The cluster connection will not work until you start sshuttle")
+
+    # "NOTE: The EC2 instance will automatically terminate at 08:00 UTC unless you delete the cron job"
+
+
+@ec2.command()
+def connect():
+    ip = get_config("current-instance-ip")
+    key = get_config("key-name")
+    c.info("Connect w/")
+    c.command(f"ssh -i ~/.ssh/{key}.pem ubuntu@{ip}")
 
 
 def get_current_running():
