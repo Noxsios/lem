@@ -94,6 +94,7 @@ cat << EOF > $provision/init-metallb.sh
 docker network create k3d-network --driver=bridge --subnet=172.20.0.0/16 --gateway 172.20.0.1
 kubectl create -f https://raw.githubusercontent.com/metallb/metallb/v0.10.2/manifests/namespace.yaml
 kubectl create -f https://raw.githubusercontent.com/metallb/metallb/v0.10.2/manifests/metallb.yaml
+kubectl create -f ~/provision/metallb-config.yaml
 EOF
 
 chown -R ubuntu $provision

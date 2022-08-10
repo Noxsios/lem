@@ -317,7 +317,9 @@ def start(big, private, metal):
             YAML().dump(remote_kubeconfig, f)
             f.close()
         c.info("To access your new cluster w/ kubectl:")
-        c.command(f"export KUBECONFIG={str(dev_kubeconfig_path)}")
+        c.command(f"export KUBECONFIG={str(dev_kubeconfig_path.expanduser())}")
+
+        set_config("current-instance-ip", inst["PublicIpAddress"])
 
 
 def get_current_running():
