@@ -27,7 +27,7 @@ python3 -m pip install git+https://github.com/Noxsios/lem.git
 
 ## Usage
 
-Run in interactive CLI mode:
+Get help:
 
 ```shell
 lem --help
@@ -36,7 +36,7 @@ lem --help
 ### Command examples
 
 ```bash
-# configure
+# configure (run first)
 lem configure
 
 # select big bang packages to clone
