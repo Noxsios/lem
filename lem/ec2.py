@@ -15,6 +15,7 @@ import click
 import inquirer
 from botocore.exceptions import ClientError
 from requests import get
+from ruamel.yaml import YAML
 
 from .configure import get_config, set_config
 from .console import Console
@@ -198,12 +199,28 @@ def start(big, private, metal):
     c.spinner.start(f"Tagging EC2 instance created from {sir_id}")
     inst_req = client.describe_spot_instance_requests(SpotInstanceRequestIds=[sir_id])
     inst_id = inst_req["SpotInstanceRequests"][0]["InstanceId"]
-    client.create_tags(Resources=[inst_id], Tags=[{"Key": "Name", "Value": key_name}])
+    client.create_tags(
+        Resources=[inst_id],
+        Tags=[
+            {"Key": "Name", "Value": key_name},
+            {"Key": "created-with", "Value": "https://github.com/Noxsios/lem"},
+        ],
+    )
     c.spinner.text = (
         f"Instance ({inst_id}) tagged, now waiting for instance to be (running)"
     )
     waiter = client.get_waiter("instance_running")
     waiter.wait(InstanceIds=[inst_id])
+    while True:
+        statuses = client.describe_instance_status(InstanceIds=[inst_id])
+        status = statuses["InstanceStatuses"][0]
+        if (
+            status["InstanceStatus"]["Status"] == "ok"
+            and status["SystemStatus"]["Status"] == "ok"
+        ):
+            break
+        sleep(5)
+
     c.spinner.succeed(f"Instance ({inst_id}) is ready")
     inst = client.describe_instances(InstanceIds=[inst_id])["Reservations"][0][
         "Instances"
@@ -216,7 +233,7 @@ def start(big, private, metal):
         )
         ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
         attempts = 0
-        while attempts < 10:
+        while attempts < 5:
             try:
                 ssh.connect(inst["PublicIpAddress"], pkey=ssh_key, username="ubuntu")
                 c.spinner.text = "Running ~/provision/install-deps.sh"
@@ -225,11 +242,8 @@ def start(big, private, metal):
                 )
                 stdout.channel.set_combine_stderr(True)
                 out = stdout.read().decode().strip()
-                if (
-                    out
-                    == "bash: /home/ubuntu/provision/install-deps.sh: No such file or directory"
-                ):
-                    continue
+                # print(out)
+                c.spinner.succeed("Ran ~/provision/install-deps.sh")
                 break
             except (
                 BadHostKeyException,
@@ -240,34 +254,70 @@ def start(big, private, metal):
                 c.spinner.text = "Unable to ssh, retrying in 5s"
                 attempts += 1
                 sleep(5)
-        c.spinner.succeed("Successfully ran ~/provision/install-deps.sh")
         ssh.close()
+        if attempts == 4:
+            c.error("Unable to provision automatically.")
+            c.error("Provision manually w/")
+            c.command(base_ssh_command)
 
     c.info("Private IP: {}".format(inst["PrivateIpAddress"]))
     c.info("Public IP: {}".format(inst["PublicIpAddress"]))
     c.info("Connect w/")
+
     base_ssh_command = f"ssh -i ~/.ssh/{key_name}.pem ubuntu@{inst['PublicIpAddress']}"
     base_k3d_command = "k3d cluster create -c ~/provision/k3d-config.yaml"
+    metal_flag = "--network k3d-network"
+    public_flag = f"--k3s-arg '--tls-san={inst['PublicIpAddress']}@server:0'"
+    private_flag = f"--k3s-arg '--tls-san={inst['PrivateIpAddress']}@server:0'"
+
     c.command(base_ssh_command)
-    c.info("Start k3d w/")
+    c.info("Starting k3d w/")
     if private and metal:
-        c.command(f"""{base_ssh_command} '{base_k3d_command} <extra args>"'""")
+        k3d_start_command = f"{base_k3d_command} {private_flag} {metal_flag}"
     elif private:
-        c.command(f"""{base_ssh_command} '{base_k3d_command} <extra args>"'""")
+        k3d_start_command = f"{base_k3d_command} {private_flag}"
     elif metal:
-        c.command(f"""{base_ssh_command} '{base_k3d_command} <extra args>"'""")
+        k3d_start_command = f"{base_k3d_command} {public_flag} {metal_flag}"
     else:
         # public and no metal (default)
-        c.command(
-            f"""{base_ssh_command} '{base_k3d_command} --k3s-arg "--tls-san={inst["PublicIpAddress"]}@server:0"'"""
+        k3d_start_command = f"{base_k3d_command} {public_flag}"
+    c.command(k3d_start_command)
+
+    c.spinner.start("Running above command...")
+    with paramiko.SSHClient() as ssh:
+        ssh_key = paramiko.RSAKey.from_private_key_file(
+            str(Path.home() / ".ssh" / key_name) + ".pem"
         )
+        ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+        ssh.connect(inst["PublicIpAddress"], pkey=ssh_key, username="ubuntu")
 
-    set_config("current-instance-ip", inst["PublicIpAddress"])
+        if metal:
+            c.spinner.text = "$ ssh ... 'bash ~/provision/init-metallb.sh'"
+            stdin, stdout, stderr = ssh.exec_command("bash ~/provision/init-metallb.sh")
+            stdout.channel.set_combine_stderr(True)
+            out = stdout.read().decode().strip()
+            # print(out)
 
-    # k3d cluster create \
-    # --config ~/provision/k3d-config.yaml
-    # --k3s-arg "--tls-san=${access_ip}@server:0" \ # access_ip depends on whether <public> or <private>
-    # --network k3d-network \ # include ONLY if <metal>
+        c.spinner.text = f"$ ssh ... '{k3d_start_command}'"
+        stdin, stdout, stderr = ssh.exec_command(k3d_start_command)
+        stdout.channel.set_combine_stderr(True)
+        out = stdout.read().decode().strip()
+        # print(out)
+
+        c.spinner.stop()
+        _, stdout, _ = ssh.exec_command("cat ~/.kube/config")
+        remote_kubeconfig = YAML().load(stdout.read().decode().strip())
+        remote_kubeconfig["clusters"][0]["cluster"]["server"] = (
+            f"https://{inst['PrivateIpAddress']}:6443"
+            if private
+            else f"https://{inst['PublicIpAddress']}:6443"
+        )
+        dev_kubeconfig_path = Path.home() / ".kube" / f"{key_name}-bb-dev-config"
+        with dev_kubeconfig_path.open("w") as f:
+            YAML().dump(remote_kubeconfig, f)
+            f.close()
+        c.info("To access your new cluster w/ kubectl:")
+        c.command(f"export KUBECONFIG={str(dev_kubeconfig_path)}")
 
 
 def get_current_running():
@@ -277,6 +327,7 @@ def get_current_running():
     running_inst = client.describe_instances(
         Filters=[
             {"Name": "key-name", "Values": [get_config("key-name")]},
+            {"Name": "tag:created-with", "Values": ["https://github.com/Noxsios/lem"]},
             {"Name": "instance-state-name", "Values": ["running"]},
         ]
     )["Reservations"]

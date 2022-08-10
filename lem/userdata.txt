@@ -24,8 +24,8 @@ curl -fsSL https://raw.githubusercontent.com/rancher/k3d/main/install.sh -o $pro
 cat << EOF > $provision/install-deps.sh
 #!/usr/bin/env bash
 
-sudo apt -y update
-sudo apt install -y apt-transport-https ca-certificates curl gnupg-agent software-properties-common kubectl jq tree vim nano bat
+sudo apt -qq -y update
+sudo apt -qq install -y apt-transport-https ca-certificates curl gnupg-agent software-properties-common kubectl jq tree vim nano bat
 
 echo
 sh ./get-docker.sh
